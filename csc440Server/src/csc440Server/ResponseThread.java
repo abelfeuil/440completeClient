@@ -1,5 +1,3 @@
-package csc440Server;
-
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.PrintWriter;
@@ -12,7 +10,9 @@ public class ResponseThread extends Thread
 {
 	ConnectedClient theClient;
 	LinkedList<ConnectedClient> allTheClients;
-
+	private static String theFileName = "";
+	private static int theSize = -1;
+	
 	public ResponseThread(ConnectedClient theClient)
 	{
 		this.theClient = theClient;
@@ -21,21 +21,61 @@ public class ResponseThread extends Thread
 	
 	public void run()
 	{
-		String theFileName = this.theClient.getMessage();
-		String theSize = this.theClient.getMessage();
-		int theSize = Integer.parseInt(this.theClient.getMessage());
-		System.out.println("About to receive: " + theFileName + "(" + theSize + " bytes");
-		File theNewFile = new File("./myfiles/" + theFileName);
-		FileOutputStream fos;
-		try
+		//is the client sharing or getting?
+		String clientMode = this.theClient.getMessage();
+		
+		if(clientMode.equals("share"))
 		{
-			fos = new FileOutputStream(theNewFile);
-			for(int i = 0; i < theSize; i++)
-			{
-				fos.write(this.theClient.readByte());
-			}
-			 fos.close();
+			//Wait for the client to tell us the name of the file he is about to send
+			ResponseThread.theFileName = this.theClient.getMessage();
+			ResponseThread.theSize = Integer.parseInt(this.theClient.getMessage());
+			this.theClient.initBytes(theSize, true);
+			System.out.println("Sharing Mode");
+			
+			//we need to request bytes from our connectClient that
+			//other connected clients need
+			//*****Write Code HERE****
 		}
-		catch(Exception e){}
+		else
+		{
+			//do get stuff
+			System.out.println("Getting Mode");
+			
+			//send the client the name of the file
+			this.theClient.sendMessage(ResponseThread.theFileName);
+			this.theClient.sendMessage("" + ResponseThread.theSize);
+			this.theClient.initBytes(theSize, false);
+			
+			while(true)
+			{
+
+				//wait for client requests for receiving a byte
+				String whichByte = this.theClient.getMessage();
+				boolean foundByte = false;
+				
+				for(ConnectedClient cc : Driver.theNotBusyClients)
+				{
+					if(cc != this.theClient && cc.hasByte(Integer.parseInt(whichByte)))
+					{
+						try
+						{
+							//share the byte with this guy
+							cc.sendMessage(whichByte);
+							this.theClient.sendByte(cc.readByte());
+							foundByte = true;
+						}
+						catch(Exception e){}
+					}
+				}
+				if(!foundByte)
+				{
+					try
+					{
+						this.theClient.sendByte(-1);
+					}
+					catch(Exception e){}
+					}
+				}
+		}
 	}
 }

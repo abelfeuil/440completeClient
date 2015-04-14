@@ -1,5 +1,4 @@
 package csc440client;
-
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -12,8 +11,10 @@ public class Driver
 {
 	public static void main(String[] args) throws Exception
 	{
+		//******Client Code******
 		//connect to the server
 		Socket theServer = new Socket("localhost",1234);
-		
-		ClientCommunicationProtocol ccp = new ClientCommunicationProtocol;
+		ClientCommunicationProtocol ccp = new ClientCommunicationProtocol(theServer);
+		ccp.startCommunication();
+	}
 }

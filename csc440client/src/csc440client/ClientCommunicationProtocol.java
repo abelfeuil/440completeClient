@@ -6,26 +6,36 @@ import java.io.PrintWriter;
 import java.net.Socket;
 import java.util.Scanner;
 
+
 public class ClientCommunicationProtocol 
 {
 	private Socket theServer;
+	private Scanner serverInput;
+	private Scanner terminalInput;
+	private PrintWriter serverOutput;
+	private int[] theFileBytes;
+	private fileFillThread fft;
+	private byteRequestThread brt;
+	private ConnectedServer cs;
 	
-	public ClientCommunicationProtocol(Socket theServer)
+	public ClientCommunicationProtocol(Socket theServer) throws Exception
 	{
 		this.theServer = theServer;
+		this.cs = new ConnectedServer(this.theServer);
+		
+		//ability to read from server
+		this.serverInput = new Scanner(this.theServer.getInputStream());
+
+		//ability to read from local client
+		this.terminalInput = new Scanner(System.in);
+
+		//ability to write to the server
+		this.serverOutput = new PrintWriter(this.theServer.getOutputStream(),true);
 	}
 	
-	public void startCommunication() throws Exception
+	private void shareFile() throws Exception
 	{
-		//ability to read from server
-		Scanner serverInput = new Scanner(this.theServer.getInputStream());
-				
-		//ability to read from local client
-		Scanner terminalInput = new Scanner(System.in);
-		
-		//ability to write to the server
-		PrintWriter serverOutput = new PrintWriter(this.theServer.getOutputStream(),true);
-		
+		this.serverOutput.println("share");
 		File myFilesDir = new File("./myFiles");
 		String[] theFiles = myFilesDir.list();
 		int pos = 0;
@@ -41,29 +51,58 @@ public class ClientCommunicationProtocol
 		//Read the file from the client
 		File theFile = new File("./myFiles/" + theFiles[Integer.parseInt(theAnswer)]);
 		FileInputStream fis = new FileInputStream(theFile);
-		
+
 		//let the server know about the file we are about to send
 		serverOutput.println(theFiles[Integer.parseInt(theAnswer)]);
 		serverOutput.println(fis.available());
-		while(fis.available() > 0)
-		{
-			this.theServer.getOutputStream().write(fis.read());
-		}
-		System.out.println("DONE");
 		
-			/*
-		File theClone = new File("./myFiles/clone" + theFiles[Integer.parseInt(theAnswer)]);
-		FileOutputStream fos = new FileOutputStream(theClone);
-		System.out.println("num bytes: " + fis.available());
-
-		//we want to read in all of the bytes and display them to the screen
+		theFileBytes = new int[fis.available()];
+		pos = 0;
 		while(fis.available() > 0)
 		{
-			fos.write(fis.read());
+			theFileBytes[pos] = fis.read();
+			pos++;
 		}
-		System.out.println("DONE");
-		fos.close();
-		*/
+		System.out.println("Locally Buffered File");
+		
+		//we only need to spawn a byteRequestThread since we have
+		//all of the bytes already
+		brt = new byteRequestThread(this.theFileBytes, cs);
+		brt.start();
+	}
+	
+	private void getFile()
+	{
+		this.serverOutput.println("get");
+		String theFileName = this.serverInput.nextLine();
+		int theFileSize = Integer.parseInt(this.serverInput.nextLine());
+		theFileBytes = new int[theFileSize];
+		java.util.Arrays.fill(theFileBytes, -1);
+		System.out.println("Ready to receive: " + theFileName + "(" + theFileSize +  " bytes)");
+		//we need to spawn both a byteRequest and a fileFill Thread
+		//since we are participating in sharing the portion of the
+		//file we have, and we want to fill in the rest of the file
+		//we do not have
+		brt = new byteRequestThread(this.theFileBytes, cs);
+		brt.start();
+		fft = new fileFillThread(this.theFileBytes, cs);
+		fft.start();
+	}
+	
+	public void startCommunication() throws Exception
+	{
+		System.out.print("What do you want to do? (share or get):");
+		String answer = terminalInput.nextLine();
+		
+		if(answer.equalsIgnoreCase("share"))
+		{
+			//do share stuff
+			this.shareFile();
+		}
+		else
+		{
+			//do get stuff
+			this.getFile();
 		}
 	}
 }
